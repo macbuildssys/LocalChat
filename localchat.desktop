@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=LocalChat
+Comment=Offline LLM chat powered by Ollama
+Exec=/opt/localchat/localchat
+Icon=/opt/localchat/localchat.svg
+Type=Application
+Categories=Utility;Network;
+Terminal=false
+StartupNotify=true
