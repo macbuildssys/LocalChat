@@ -75,7 +75,7 @@ To allow access from another device on your network (e.g. a VM host or a second 
 OLLAMA_HOST=0.0.0.0 python3 run.py
 ```
 
-Alternatively, edit `run.py` and change the uvicorn host from `127.0.0.1` to `0.0.0.0` (this is the current default). Then open the machine's local network IP in your browser:
+Alternatively, edit the script `run.py` and change the uvicorn host from `0.0.0.0` to `127.0.0.1 (this is the current default). Then open the machine's local network IP in your browser:
 
 ```
 http://192.168.x.x:8765
@@ -96,10 +96,13 @@ Make sure Ollama on the remote machine is also bound to `0.0.0.0`:
 
 sudo systemctl edit ollama
 
-# Add:
+# Add (Add the service and environment as shown below):
 
 # [Service]
 Environment="OLLAMA_HOST=0.0.0.0:11434"
+
+# Restart ollama:
+
 sudo systemctl restart ollama
 ```
 
