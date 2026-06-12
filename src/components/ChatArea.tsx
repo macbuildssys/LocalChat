@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import { generateUUID } from "../utils/uuid";
 import {
   Send, Square, Copy, Check, ChevronDown, Eraser, Bot,
   Pencil, PanelLeftOpen, PanelLeftClose,
@@ -303,7 +304,7 @@ export default function ChatArea({ chatId, sidebarOpen, onToggleSidebar }: {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [activeChat?.messages.length, activeChat?.messages.at(-1)?.content]);
 
   const runStream = useCallback(async (model: string, apiMsgs: { role: 'user'|'assistant'; content: string; images?: string[] }[]) => {
-    addMessage(chatId, { id: crypto.randomUUID(), role: 'assistant', content: '', model, timestamp: Date.now() });
+    addMessage(chatId, { id: generateUUID(), role: 'assistant', content: '', model, timestamp: Date.now() });
     setStreaming(true);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -339,7 +340,7 @@ export default function ChatArea({ chatId, sidebarOpen, onToggleSidebar }: {
         ragSources = [doc.filename];
         fullContent = `Full document: "${doc.filename}" (${doc.chunks} sections)\n\n${doc.text}\n\n---\n\nUsing the full document above, answer this: ${fullContent}`;
       } catch (err) {
-        addMessage(chatId, { id: crypto.randomUUID(), role: 'assistant', content: `⚠️ **Could not load full document:** ${err instanceof Error ? err.message : String(err)}`, model: fresh.model, timestamp: Date.now() });
+        addMessage(chatId, { id: generateUUID(), role: 'assistant', content: `⚠️ **Could not load full document:** ${err instanceof Error ? err.message : String(err)}`, model: fresh.model, timestamp: Date.now() });
         setStreaming(false);
         return;
       }
@@ -360,7 +361,7 @@ export default function ChatArea({ chatId, sidebarOpen, onToggleSidebar }: {
       } catch (err) {
         console.error('RAG retrieval error:', err);
         addMessage(chatId, {
-          id: crypto.randomUUID(), role: 'assistant',
+          id: generateUUID(), role: 'assistant',
           content: `⚠️ **RAG retrieval failed:** ${err instanceof Error ? err.message : String(err)}\n\nMake sure \`nomic-embed-text\` is pulled: \`ollama pull nomic-embed-text\``,
           model: fresh.model, timestamp: Date.now(),
         });
@@ -371,7 +372,7 @@ export default function ChatArea({ chatId, sidebarOpen, onToggleSidebar }: {
 
     const prior = fresh.messages.map(m => ({ role: m.role as 'user'|'assistant', content: m.content, images: m.images }));
     const displayNames = [...names, ...ragSources.map(s => `🔍 ${s}`)];
-    addMessage(chatId, { id: crypto.randomUUID(), role: 'user', content, model: fresh.model, timestamp: Date.now(), images: images.length ? images : undefined, attachmentNames: displayNames.length ? displayNames : undefined });
+    addMessage(chatId, { id: generateUUID(), role: 'user', content, model: fresh.model, timestamp: Date.now(), images: images.length ? images : undefined, attachmentNames: displayNames.length ? displayNames : undefined });
     setPending([]);
 
     await runStream(fresh.model, [...prior, { role: 'user', content: fullContent, images: images.length ? images : undefined }]);
@@ -395,7 +396,7 @@ export default function ChatArea({ chatId, sidebarOpen, onToggleSidebar }: {
   const handleAttach = useCallback(async (files: FileList) => {
     const added: PendingAttachment[] = [];
     for (const file of Array.from(files)) {
-      try { added.push({ ...await uploadFile(file), id: crypto.randomUUID() }); }
+      try { added.push({ ...await uploadFile(file), id: generateUUID() }); }
       catch (err) { console.error(`Upload failed for ${file.name}:`, err); }
     }
     setPending(prev => [...prev, ...added]);

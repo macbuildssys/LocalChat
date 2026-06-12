@@ -1,6 +1,6 @@
 # LocalChat
 
-A fully offline, chatbot interface for your local Ollama models. No cloud. No telemetry. No backend server. Runs entirely in your browser.
+A fully offline chat interface for your local Ollama models. No cloud. No telemetry. Runs a lightweight Python backend with optional RAG support.
 
 ---
 
@@ -13,73 +13,121 @@ A fully offline, chatbot interface for your local Ollama models. No cloud. No te
 - Markdown rendering with syntax-highlighted code blocks
 - Copy button on code blocks and messages
 - Dark / light theme toggle
-- All chat history persisted in localStorage (survives refreshes)
+- Chat history persisted in `localStorage` (survives refreshes)
 - Clear chat without losing the session
-- Zero backend: talks directly to Ollama via a Vite proxy
+- RAG (Retrieval-Augmented Generation) support via ChromaDB
+- Python FastAPI backend proxies all Ollama requests (avoids CORS issues)
 
 ---
 
 ## Prerequisites
 
 1. **Ollama** must be installed and running.
-   - Install: https://ollama.com or curl -fsSL https://ollama.com/install.sh | sh
-
+   - Install: https://ollama.com or `curl -fsSL https://ollama.com/install.sh | sh`
    - Start: `ollama serve` (or it may already be running as a systemd service)
+   - Pull at least one model: `ollama pull llama3.2`
 
-2. **Node.js 18+** and **npm**.
+2. **Node.js 18+** and **npm** (for building the frontend).
+
+3. **Python 3.10+** and **pip** (for the backend).
 
 ---
 
 ## Setup
 
-```
+```bash
 # Clone or copy the project
-cd ~/projects  # wherever you keep things
+cd ~/projects
 
-# Install dependencies (one-time)
-cd ollama
-
+# Install frontend dependencies (one-time)
+cd ollama-orig
 npm install
 
-npm run dev
+# Create and activate a Python virtual environment (one-time)
+python3 -m venv venv
+source venv/bin/activate   # fish shell: source venv/bin/activate.fish
+
+# Install backend dependencies (one-time)
+pip install -r requirements.txt
+
+# Build the frontend
+npm run build
 ```
 
 ---
 
 ## Run
 
-```
+```bash
+source venv/bin/activate   # fish shell: source venv/bin/activate.fish
 python3 run.py
 ```
 
-Open http://localhost:5176 in your browser.
+Open http://localhost:8765 in your browser.
 
-The Vite dev server proxies all `/ollama/*` requests to (example) `http://127.0.0.1:5176`,
-so you do not need to configure any CORS settings in Ollama.
+The backend proxies all Ollama requests, so you do not need to configure CORS settings in Ollama.
 
 ---
 
-## Current Models examples (Cmd: ollama list)
+## Accessing from Another Machine or VM
+
+By default, LocalChat binds to `127.0.0.1:8765` and is only reachable from the same machine.
+
+To allow access from another device on your network (e.g. a VM host or a second machine), start with:
+
+```bash
+OLLAMA_HOST=0.0.0.0 python3 run.py
+```
+
+Or edit `run.py` and change the uvicorn host from `127.0.0.1` to `0.0.0.0`. Then open the machine's local network IP in your browser:
 
 ```
-ministral-3:8b    6.0 GB
-qwen2.5:3b        1.9 GB
-gemma4:e4b        9.6 GB
-phi4:latest       9.1 GB
-llama3.1:latest   4.9 GB
+http://192.168.x.x:8765
 ```
 
-All of these will appear automatically in the model dropdown once Ollama is running.
+Note: `crypto.randomUUID()` requires a secure context in modern browsers. When accessing over plain HTTP from a non-localhost address, the app patches this automatically. If you see UUID-related errors, rebuild after pulling the latest changes.
+
+If the host Ollama is on a different machine than where LocalChat is running, set the `OLLAMA_HOST` environment variable before starting:
+
+```bash
+OLLAMA_HOST=http://192.168.122.1:11434 python3 run.py
+```
+
+Make sure Ollama on the remote machine is also bound to `0.0.0.0`:
+
+```bash
+# On the machine running Ollama, edit its systemd service:
+sudo systemctl edit ollama
+# Add:
+# [Service]
+# Environment="OLLAMA_HOST=0.0.0.0:11434"
+sudo systemctl restart ollama
+```
+
+---
+
+## Current Models (example: `ollama list`)
+
+```
+qwen3:latest               5.2 GB
+qwen3:4b                   2.5 GB
+phi4-mini:latest           2.5 GB
+llama3.2:3b                2.0 GB
+ministral-3:3b             3.0 GB
+deepseek-r1:1.5b           1.1 GB
+gemma4:e4b                 9.6 GB
+nomic-embed-text:latest    274 MB
+```
+
+All of these appear automatically in the model dropdown once Ollama is running.
 
 ---
 
 ## Adding New Models
 
-```
+```bash
 ollama pull mistral
-
 ollama pull codellama
-
 ollama pull deepseek-coder-v2
 ```
 
@@ -89,36 +137,39 @@ Refresh the browser tab after pulling. The new model appears in the dropdown imm
 
 ## Build for Production
 
-If you want to serve the app as a static build (e.g. with nginx):
-
 ```
 npm run build
 
-npm run preview   # serves the built app on port 5173, still with the Ollama proxy
+python3 run.py
 ```
 
-For a proper production nginx setup, you would proxy `/ollama/` to `http://127.0.0.1:5176/`
-in your nginx config.
+The backend serves the built frontend directly. There is no separate static file server needed.
 
----
+
 
 
 ## Data Storage
 
-All chat sessions are stored in your browser's `localStorage` under the key `localchat-v1`.
-No files are written to disk by the app itself.
+Chat sessions are stored in your browser's `localStorage` under the key `localchat-v1`. No chat data is written to disk by the app itself.
 
-To export or back up chats, open DevTools → Application → Local Storage → `localchat-v1`
-and copy the JSON value.
+RAG document embeddings are stored in a local ChromaDB database at `./chroma_db/` inside the project directory. This persists across restarts.
 
----
+To export or back up chats, open DevTools (F12) and go to Application > Local Storage > `localchat-v1` and copy the JSON value.
+
 
 ## Troubleshooting
 
 **"Could not connect to Ollama"**
 - Run `ollama serve` in a terminal.
 
-- Check `ss -tlnp | grep 5176` to confirm it is listening.
+- Check `ss -tlnp | grep 11434` to confirm Ollama is listening.
+
+- If Ollama is on a different machine, set `OLLAMA_HOST` as described above and ensure port 11434 is not blocked by a firewall.
+
+**Backend fails to start with `ModuleNotFoundError`**
+- Make sure the virtual environment is activated: `source venv/bin/activate.fish`
+
+- Run `pip install -r requirements.txt` inside the venv.
 
 **Model not appearing in the dropdown**
 - Run `ollama list` to verify it is downloaded.
@@ -126,24 +177,32 @@ and copy the JSON value.
 - Refresh the browser tab.
 
 **Slow responses**
-- This is normal for large models (phi4, gemma4, etc) on CPU.
+- Normal for large models (gemma4, phi4, etc.) on CPU.
+- Use `qwen3:4b` or `llama3.2:3b` for faster responses on lighter hardware.
 
-- Use `qwen2.5:3b` for fast responses on lighter hardware.
+**Port 8765 not reachable from another machine**
+- Check the firewall on the machine running LocalChat: `sudo ufw allow 8765`
 
----
+- Confirm the backend is bound to `0.0.0.0` and not `127.0.0.1`.
+
+
 
 ## Tech Stack
 
-| Layer         | Technology                              |
-|---------------|-----------------------------------------|
-| UI framework  | React 18 + TypeScript + Vite            |
-| Styling       | Tailwind CSS                            |
-| State / store | Zustand (persisted to localStorage)     |
-| Markdown      | react-markdown + remark-gfm             |
-| Highlighting  | rehype-highlight + highlight.js         |
-| Icons         | lucide-react                            |
-| LLM backend   | Ollama (local, via Vite proxy)          |
-| Fonts         | DM Sans + JetBrains Mono (Google Fonts) |
+| Layer            | Technology                              |
+|------------------|-----------------------------------------|
+| UI framework     | React 18 + TypeScript + Vite            |
+| Styling          | Tailwind CSS                            |
+| State / store    | Zustand (persisted to localStorage)     |
+| Markdown         | react-markdown + remark-gfm             |
+| Highlighting     | rehype-highlight + highlight.js         |
+| Icons            | lucide-react                            |
+| Fonts            | DM Sans + JetBrains Mono (Google Fonts) |
+| Backend          | Python + FastAPI + uvicorn              |
+| RAG / embeddings | ChromaDB                                |
+| HTTP client      | httpx                                   |
+| LLM backend      | Ollama (local)                          |
+
 
 ## License
 

@@ -30,6 +30,24 @@ interface AppState {
   setFullDoc: (id: string | null, name: string | null) => void;
 }
 
+// export const useStore = create<AppState>()(
+//   persist(
+//     (set, get) => ({
+//       chats: [],
+//       activeChatId: null,
+//       models: [],
+//       isStreaming: false,
+//       isDark: true,
+//       ollamaError: null,
+//       useRAG: false,
+//       fullDocId: null,
+//       fullDocName: null,
+
+//       createChat: (model) => {
+//         const id = crypto.randomUUID();
+//         set(s => ({ chats: [{ id, title: 'New Chat', model, messages: [], createdAt: Date.now(), updatedAt: Date.now() }, ...s.chats], activeChatId: id }));
+//         return id;
+//       },
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -44,11 +62,16 @@ export const useStore = create<AppState>()(
       fullDocName: null,
 
       createChat: (model) => {
-        const id = crypto.randomUUID();
+        const id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c: string) => {
+          const r = Math.random() * 16 | 0;
+          const v = c === 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
         set(s => ({ chats: [{ id, title: 'New Chat', model, messages: [], createdAt: Date.now(), updatedAt: Date.now() }, ...s.chats], activeChatId: id }));
         return id;
       },
 
+  
       deleteChat: (id) => set(s => {
         const chats = s.chats.filter(c => c.id !== id);
         return { chats, activeChatId: s.activeChatId === id ? (chats[0]?.id ?? null) : s.activeChatId };
