@@ -1,5 +1,9 @@
 # LocalChat
 
+<p align="center">
+  <img src="LocalChat.png" alt="LocalChat screenshot" width="800"/>
+</p>
+
 A fully offline chat interface for your local Ollama models. No cloud. No telemetry. Runs a lightweight Python backend with optional RAG support.
 
 ## Features
