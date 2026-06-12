@@ -2,7 +2,6 @@
 """
 LocalChat launcher — works both as a normal script and as a PyInstaller bundle.
 """
-
 import os
 import sys
 import subprocess
@@ -26,7 +25,6 @@ HOST = "0.0.0.0"
 PORT = 8765
 URL  = f"http://{HOST}:{PORT}"
 
-
 def _build_frontend_if_needed():
     """Only relevant when running from source, not from a bundle."""
     if getattr(sys, 'frozen', False):
@@ -39,13 +37,11 @@ def _build_frontend_if_needed():
     if r.returncode != 0:
         sys.exit("Frontend build failed. Run: npm install && npm run build")
 
-
 def _serve():
     import uvicorn
     # Direct import so PyInstaller can discover all dependencies
     from backend.main import app
     uvicorn.run(app, host=HOST, port=PORT, log_level="warning", access_log=False)
-
 
 def _wait(timeout=15.0) -> bool:
     deadline = time.time() + timeout
@@ -56,7 +52,6 @@ def _wait(timeout=15.0) -> bool:
         except Exception:
             time.sleep(0.25)
     return False
-
 
 if __name__ == "__main__":
     _build_frontend_if_needed()
