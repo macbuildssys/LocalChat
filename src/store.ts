@@ -30,24 +30,6 @@ interface AppState {
   setFullDoc: (id: string | null, name: string | null) => void;
 }
 
-// export const useStore = create<AppState>()(
-//   persist(
-//     (set, get) => ({
-//       chats: [],
-//       activeChatId: null,
-//       models: [],
-//       isStreaming: false,
-//       isDark: true,
-//       ollamaError: null,
-//       useRAG: false,
-//       fullDocId: null,
-//       fullDocName: null,
-
-//       createChat: (model) => {
-//         const id = crypto.randomUUID();
-//         set(s => ({ chats: [{ id, title: 'New Chat', model, messages: [], createdAt: Date.now(), updatedAt: Date.now() }, ...s.chats], activeChatId: id }));
-//         return id;
-//       },
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
