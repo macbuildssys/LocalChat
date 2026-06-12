@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { generateUUID } from "../utils/uuid";
 import {
   MessageSquarePlus, Pencil, Trash2, Check, X,
   Sun, Moon, Database, ChevronDown, Upload, Loader2, ToggleLeft, ToggleRight, BookOpen, Settings,
@@ -94,7 +95,7 @@ function KnowledgeBase({ isDark }: { isDark: boolean }) {
       try {
         const result = await uploadFile(file);
         if (result.type === 'document' && result.text) {
-          await ragIngest(crypto.randomUUID(), result.filename, result.text);
+          await ragIngest(generateUUID(), result.filename, result.text);
         } else if (result.type === 'image') {
           console.warn('Images cannot be added to the KB — only text documents.');
         }

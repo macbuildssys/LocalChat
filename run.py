@@ -21,7 +21,8 @@ def _base_dir() -> Path:
     return Path(__file__).parent
 
 
-HOST = "127.0.0.1"
+#HOST = "127.0.0.1"
+HOST = "0.0.0.0"
 PORT = 8765
 URL  = f"http://{HOST}:{PORT}"
 
