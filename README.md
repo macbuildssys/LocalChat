@@ -34,11 +34,11 @@ A fully offline chat interface for your local Ollama models. No cloud. No teleme
 
 ```
 # Clone or copy the project
-cd ~/projects # cd LocalChat
+git clone https://github.com/macbuildssys/ollama-orig.git
 
-# Install frontend dependencies (one-time)
 cd ollama-orig
 
+# Install frontend dependencies (one-time)
 npm install
 
 # Create and activate a Python virtual environment (one-time)
