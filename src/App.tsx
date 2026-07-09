@@ -15,7 +15,7 @@ function ErrorBanner({ message, isDark }: { message: string; isDark: boolean }) 
 }
 
 export default function App() {
-  const { isDark, models, setModels, chats, activeChatId, setActiveChat, createChat, ollamaError, setOllamaError } = useStore();
+  const { isDark, models, setModels, chats, activeChatId, setActiveChat, createChat, ollamaError, setOllamaError, lastUsedModel } = useStore();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => { document.documentElement.classList.toggle('dark', isDark); }, [isDark]);
@@ -30,7 +30,10 @@ export default function App() {
     if (!activeChatId && chats.length > 0) setActiveChat(chats[0].id);
   }, [activeChatId, chats, setActiveChat]);
 
-  const defaultModel  = models[0]?.name ?? '';
+  // Keep using whichever model the user last picked, even for brand-new chats,
+  // instead of silently resetting to the first model Ollama happens to list.
+  const modelStillExists = lastUsedModel && models.some(m => m.name === lastUsedModel);
+  const defaultModel = (modelStillExists ? lastUsedModel : models[0]?.name) ?? '';
   const handleNewChat = () => createChat(defaultModel);
   const toggle        = () => setSidebarOpen(v => !v);
 

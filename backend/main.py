@@ -27,10 +27,8 @@ def load_config() -> dict:
             pass
     return {}
 
-
 def save_config(data: dict):
     CONFIG_PATH.write_text(json.dumps(data, indent=2))
-
 
 def get_ollama_host() -> str:
     """
@@ -44,17 +42,14 @@ def get_ollama_host() -> str:
         raw = f"{raw}:11434"
     return raw.rstrip("/")
 
-
 app = FastAPI(title="LocalChat")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
 
 @app.get("/api/config")
 def api_get_config():
     cfg = load_config()
     host = os.environ.get("OLLAMA_HOST") or cfg.get("ollama_host", "127.0.0.1:11434")
     return {"ollama_host": host, "env_override": "OLLAMA_HOST" in os.environ}
-
 
 @app.post("/api/config")
 def api_save_config(body: dict):
@@ -76,7 +71,6 @@ async def get_models():
         except Exception as exc:
             raise HTTPException(502, f"Cannot reach Ollama at {ollama}: {exc}")
 
-
 @app.post("/api/chat")
 async def chat(request: Request):
     body   = await request.json()
@@ -90,13 +84,11 @@ async def chat(request: Request):
 
     return StreamingResponse(_stream(), media_type="application/x-ndjson")
 
-
 ACCEPTED = (
     ".pdf .docx .doc .epub .odt .ods .odp "
     ".txt .md .rst .csv .json .xml .html .htm .rtf "
     ".jpg .jpeg .png .gif .webp .bmp .tiff .tif"
 ).split()
-
 
 @app.post("/api/upload")
 async def upload(file: UploadFile = File(...)):
@@ -116,7 +108,6 @@ async def upload(file: UploadFile = File(...)):
         return {"filename": filename, "type": "document", "text": text}
     raise HTTPException(415, f"Cannot handle: {suffix}")
 
-
 @app.post("/api/rag/ingest")
 async def rag_ingest(body: dict):
     doc_id, filename, text = body.get("doc_id",""), body.get("filename",""), body.get("text","")
@@ -129,17 +120,14 @@ async def rag_ingest(body: dict):
         raise HTTPException(500, f"Ingest failed: {exc}")
     return {"doc_id": doc_id, "chunks": n, "filename": filename}
 
-
 @app.get("/api/rag/documents")
 def rag_documents():
     return rag_module.list_docs()
-
 
 @app.delete("/api/rag/documents/{doc_id}")
 def rag_delete(doc_id: str):
     rag_module.delete_doc(doc_id)
     return {"ok": True}
-
 
 @app.post("/api/rag/retrieve")
 async def rag_retrieve(body: dict):
@@ -153,14 +141,12 @@ async def rag_retrieve(body: dict):
         raise HTTPException(500, f"Retrieval failed: {exc}")
     return {"chunks": chunks}
 
-
 @app.get("/api/rag/document/{doc_id}")
 def rag_full_document(doc_id: str):
     result = rag_module.get_full_doc(doc_id)
     if not result["text"]:
         raise HTTPException(404, f"Document {doc_id} not found in KB")
     return result
-
 
 _dist = Path(__file__).parent.parent / "dist"
 if _dist.exists():

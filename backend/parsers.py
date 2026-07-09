@@ -2,7 +2,6 @@
 Extract plain text from uploaded files.
 Each parser is imported lazily so missing optional deps don't crash the server.
 """
-
 import os
 import tempfile
 from pathlib import Path
@@ -18,14 +17,11 @@ IMAGE_EXTENSIONS = {
     ".bmp", ".tiff", ".tif", ".svg",
 }
 
-
 def is_image(filename: str) -> bool:
     return Path(filename).suffix.lower() in IMAGE_EXTENSIONS
 
-
 def is_document(filename: str) -> bool:
     return Path(filename).suffix.lower() in DOCUMENT_EXTENSIONS
-
 
 def extract_text(content: bytes, filename: str) -> str:
     suffix = Path(filename).suffix.lower()
@@ -39,7 +35,6 @@ def extract_text(content: bytes, filename: str) -> str:
             os.unlink(tmp)
         except OSError:
             pass
-
 
 def _dispatch(path: str, suffix: str) -> str:
     if suffix == ".pdf":
@@ -57,7 +52,6 @@ def _dispatch(path: str, suffix: str) -> str:
             return fh.read()
     raise ValueError(f"Unsupported file type: {suffix}")
 
-
 def _pdf(path: str) -> str:
     try:
         import fitz  # pymupdf
@@ -67,7 +61,6 @@ def _pdf(path: str) -> str:
         return "\n\n".join(p for p in pages if p.strip())
     except ImportError:
         raise RuntimeError("pymupdf not installed. Run: pip install pymupdf")
-
 
 def _docx(path: str) -> str:
     try:
@@ -81,7 +74,6 @@ def _docx(path: str) -> str:
         return "\n".join(paragraphs)
     except ImportError:
         raise RuntimeError("python-docx not installed. Run: pip install python-docx")
-
 
 def _epub(path: str) -> str:
     try:
@@ -101,7 +93,6 @@ def _epub(path: str) -> str:
             texts.append(t)
     return "\n\n".join(texts)
 
-
 def _odt(path: str) -> str:
     try:
         from odf import teletype
@@ -110,7 +101,6 @@ def _odt(path: str) -> str:
         raise RuntimeError("odfpy not installed. Run: pip install odfpy")
     doc = load(path)
     return teletype.extractText(doc.text)
-
 
 def _rtf(path: str) -> str:
     # Basic RTF stripping — good enough for plain text extraction
