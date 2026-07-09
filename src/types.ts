@@ -15,6 +15,15 @@ export interface ChatSession {
   messages: Message[];
   createdAt: number;
   updatedAt: number;
+  projectId?: string | null; // which Project folder this chat belongs to, if any
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  instructions?: string; // optional project-level system prompt / context
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface OllamaModel {

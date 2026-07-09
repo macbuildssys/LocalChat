@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LocalChat launcher — works both as a normal script and as a PyInstaller bundle.
+LocalChat launcher works both as a normal script and as a PyInstaller bundle.
 """
 import os
 import sys
@@ -11,9 +11,10 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
-
-# When running from a PyInstaller bundle, sys._MEIPASS is set to the
-# temporary directory where bundled files are extracted.
+"""
+When running from a PyInstaller bundle, sys._MEIPASS is set to the
+temporary directory where bundled files are extracted
+"""
 def _base_dir() -> Path:
     if getattr(sys, 'frozen', False):
         return Path(sys._MEIPASS)          # type: ignore[attr-defined]
@@ -21,9 +22,16 @@ def _base_dir() -> Path:
 
 
 #HOST = "127.0.0.1"
-HOST = "0.0.0.0"
+HOST = "0.0.0.0"   # bind wide so other devices on the LAN can reach it via the Ollama Host setting
 PORT = 8765
-URL  = f"http://{HOST}:{PORT}"
+"""
+Open the browser at 127.0.0.1, NOT 0.0.0.0. Browsers only treat localhost as a "secure context", 
+which navigator.clipboard.writeText() requires. Loading the literal address 0.0.0.0 (or a LAN IP)
+ disables the Clipboard API, which was the root cause of the Copy button silently failing 
+ while still showing a "Copied" confirmation
+"""
+
+URL = f"http://127.0.0.1:{PORT}"
 
 def _build_frontend_if_needed():
     """Only relevant when running from source, not from a bundle."""

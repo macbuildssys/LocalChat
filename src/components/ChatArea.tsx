@@ -15,21 +15,58 @@ import {
 } from '../api/ollama';
 import type { Message, OllamaModel, PendingAttachment } from '../types';
 
+/*
+This helper awaits the real Clipboard API and falls back to a hidden-textarea + execCommand
+copy (which works in insecure contexts and older WebKit-based webviews), only reporting success 
+when a copy actually happened
+*/
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // fall through to the legacy fallback below
+    }
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 function CodeBlock({ className, children }: { className?: string; children: React.ReactNode }) {
   const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
   const lang = /language-(\w+)/.exec(className ?? '')?.[1] ?? '';
-  const copy = () => { navigator.clipboard.writeText(String(children).replace(/\n$/, '')); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+  const copy = async () => {
+    const ok = await copyToClipboard(String(children).replace(/\n$/, ''));
+    if (ok) { setCopied(true); setFailed(false); setTimeout(() => setCopied(false), 2000); }
+    else { setFailed(true); setTimeout(() => setFailed(false), 2000); }
+  };
   return (
     <div className="relative group code-block-wrapper">
       {lang && <span className="code-block-lang">{lang}</span>}
-      <button onClick={copy} className="absolute top-2.5 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded px-2 py-0.5 text-xs flex items-center gap-1">
-        {copied ? <Check size={10}/> : <Copy size={10}/>}{copied ? 'Copied' : 'Copy'}
+      <button onClick={copy} title={failed ? 'Copy failed — select the text manually' : undefined}
+        className="absolute top-2.5 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded px-2 py-0.5 text-xs flex items-center gap-1">
+        {copied ? <Check size={10}/> : <Copy size={10}/>}{copied ? 'Copied' : failed ? 'Copy failed' : 'Copy'}
       </button>
       <code className={className}>{children}</code>
     </div>
   );
 }
-
 
 function UserMessage({ msg, isDark, onEdit, disabled }: {
   msg: Message; isDark: boolean; onEdit: (id: string, c: string) => void; disabled: boolean;
@@ -83,10 +120,14 @@ function UserMessage({ msg, isDark, onEdit, disabled }: {
   );
 }
 
-
 function AssistantMessage({ msg, isDark }: { msg: Message; isDark: boolean }) {
   const [copied, setCopied] = useState(false);
-  const copy = () => { navigator.clipboard.writeText(msg.content); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+  const [failed, setFailed] = useState(false);
+  const copy = async () => {
+    const ok = await copyToClipboard(msg.content);
+    if (ok) { setCopied(true); setFailed(false); setTimeout(() => setCopied(false), 2000); }
+    else { setFailed(true); setTimeout(() => setFailed(false), 2000); }
+  };
   return (
     <div className={`group flex gap-3 mb-6 msg-animate ${isDark ? '' : 'light-prose'}`}>
       <div className="shrink-0 w-7 h-7 rounded-full bg-violet-600 flex items-center justify-center mt-0.5"><Bot size={14} className="text-white"/></div>
@@ -109,15 +150,15 @@ function AssistantMessage({ msg, isDark }: { msg: Message; isDark: boolean }) {
           </div>
         )}
         {msg.content && (
-          <button onClick={copy} className={`mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs py-0.5 px-1.5 rounded ${isDark ? 'text-zinc-600 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-700'}`}>
-            {copied ? <Check size={11}/> : <Copy size={11}/>}{copied ? 'Copied' : 'Copy'}
+          <button onClick={copy} title={failed ? 'Copy failed — select the text manually' : undefined}
+            className={`mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs py-0.5 px-1.5 rounded ${isDark ? 'text-zinc-600 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-700'}`}>
+            {copied ? <Check size={11}/> : <Copy size={11}/>}{copied ? 'Copied' : failed ? 'Copy failed' : 'Copy'}
           </button>
         )}
       </div>
     </div>
   );
 }
-
 
 function ModelDropdown({ models, selected, onChange, isDark, disabled }: {
   models: OllamaModel[]; selected: string; onChange: (m: string) => void; isDark: boolean; disabled: boolean;
@@ -189,7 +230,6 @@ function AttachmentChip({ att, onRemove, onAddToKB, isDark }: {
     </div>
   );
 }
-
 
 const ACCEPTED = [
   'application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -277,7 +317,6 @@ function InputBox({ onSend, onStop, isStreaming, disabled, isDark, attachments, 
   );
 }
 
-
 function WelcomeScreen({ isDark, models }: { isDark: boolean; models: OllamaModel[] }) {
   return (
     <div className={`flex flex-col items-center justify-center h-full gap-6 px-8 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
@@ -290,7 +329,6 @@ function WelcomeScreen({ isDark, models }: { isDark: boolean; models: OllamaMode
     </div>
   );
 }
-
 
 export default function ChatArea({ chatId, sidebarOpen, onToggleSidebar }: {
   chatId: string; sidebarOpen: boolean; onToggleSidebar: () => void;
@@ -332,7 +370,7 @@ export default function ChatArea({ chatId, sidebarOpen, onToggleSidebar }: {
       else if (att.type === 'image' && att.base64) images.push(att.base64);
     }
 
-    // Full document mode — send entire doc as context
+    // Full document mode  send entire doc as context
     let ragSources: string[] = [];
     if (fullDocId && content.trim()) {
       try {

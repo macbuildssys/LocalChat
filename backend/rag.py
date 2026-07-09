@@ -1,4 +1,4 @@
-"""RAG pipeline — ChromaDB + Ollama nomic-embed-text."""
+"""RAG pipeline: ChromaDB + Ollama nomic-embed-text."""
 
 import logging
 from pathlib import Path
@@ -18,7 +18,6 @@ CHUNK_OVERLAP = 50
 # Module-level singleton — reused across all requests
 _collection = None
 
-
 def _get_col():
     global _collection
     if _collection is None:
@@ -34,7 +33,6 @@ def _get_col():
         log.info("ChromaDB collection opened at %s (%d items)", CHROMA_PATH, _collection.count())
     return _collection
 
-
 def _chunk(text: str) -> list[str]:
     words = text.split()
     chunks, i = [], 0
@@ -47,7 +45,6 @@ def _chunk(text: str) -> list[str]:
             break
     return chunks
 
-
 async def _embed(texts: list[str], ollama_url: str) -> list[list[float]]:
     async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(
@@ -59,7 +56,6 @@ async def _embed(texts: list[str], ollama_url: str) -> list[list[float]]:
         if "embeddings" not in data:
             raise ValueError(f"Unexpected embed response: {data}")
         return data["embeddings"]
-
 
 async def ingest(doc_id: str, filename: str, text: str, ollama_url: str) -> int:
     col    = _get_col()
@@ -92,7 +88,6 @@ async def ingest(doc_id: str, filename: str, text: str, ollama_url: str) -> int:
     )
     log.info("Ingested %d chunks for %s (total in DB: %d)", len(chunks), filename, col.count())
     return len(chunks)
-
 
 async def retrieve(
     query: str,
@@ -134,7 +129,6 @@ async def retrieve(
     log.info("Retrieved %d chunks, top score: %s", len(out), out[0]["score"] if out else "—")
     return out
 
-
 def list_docs() -> list[dict]:
     col    = _get_col()
     result = col.get(include=["metadatas"])
@@ -146,14 +140,12 @@ def list_docs() -> list[dict]:
         seen[did]["chunks"] += 1
     return list(seen.values())
 
-
 def delete_doc(doc_id: str):
     col = _get_col()
     existing = col.get(where={"doc_id": doc_id})
     if existing["ids"]:
         col.delete(ids=existing["ids"])
         log.info("Deleted %d chunks for doc_id=%s", len(existing["ids"]), doc_id)
-
 
 def get_full_doc(doc_id: str) -> dict:
     """Return all chunks for a document concatenated in order."""
