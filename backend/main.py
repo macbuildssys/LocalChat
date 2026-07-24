@@ -9,17 +9,28 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from .parsers import extract_text, is_image, is_document
 from . import rag as rag_module
+from . import voice as voice_module
+from . import paths as paths_module
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s: %(message)s")
 log = logging.getLogger("localchat")
 
-CONFIG_PATH = Path(__file__).parent.parent / "config.json"
+CONFIG_PATH = paths_module.config_dir() / "config.json"
 
 
 def load_config() -> dict:
+    if not CONFIG_PATH.exists():
+        legacy = Path(__file__).parent.parent / "config.json"
+        if legacy.exists():
+            try:
+                CONFIG_PATH.write_text(legacy.read_text())
+                log.info("Migrated config.json from %s to %s", legacy, CONFIG_PATH)
+            except Exception:
+                pass
     if CONFIG_PATH.exists():
         try:
             return json.loads(CONFIG_PATH.read_text())
@@ -49,13 +60,19 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 def api_get_config():
     cfg = load_config()
     host = os.environ.get("OLLAMA_HOST") or cfg.get("ollama_host", "127.0.0.1:11434")
-    return {"ollama_host": host, "env_override": "OLLAMA_HOST" in os.environ}
+    return {
+        "ollama_host": host,
+        "env_override": "OLLAMA_HOST" in os.environ,
+        "whisper_model": cfg.get("whisper_model", "base"),
+    }
 
 @app.post("/api/config")
 def api_save_config(body: dict):
     cfg = load_config()
     if "ollama_host" in body:
         cfg["ollama_host"] = body["ollama_host"].strip()
+    if "whisper_model" in body:
+        cfg["whisper_model"] = body["whisper_model"].strip()
     save_config(cfg)
     log.info("Config saved: %s", cfg)
     return {"ok": True, "config": cfg}
@@ -107,6 +124,19 @@ async def upload(file: UploadFile = File(...)):
             raise HTTPException(422, str(exc))
         return {"filename": filename, "type": "document", "text": text}
     raise HTTPException(415, f"Cannot handle: {suffix}")
+
+@app.post("/api/transcribe")
+async def transcribe(file: UploadFile = File(...)):
+    """Speech-to-text for the mic button. Fully offline via faster-whisper."""
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "No audio received")
+    try:
+        text = await run_in_threadpool(voice_module.transcribe, content, file.filename or "audio.webm")
+    except Exception as exc:
+        log.exception("Transcription failed")
+        raise HTTPException(500, f"Transcription failed: {exc}")
+    return {"text": text}
 
 @app.post("/api/rag/ingest")
 async def rag_ingest(body: dict):

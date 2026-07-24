@@ -6,12 +6,12 @@ import { generateUUID } from "../utils/uuid";
 import {
   Send, Square, Copy, Check, ChevronDown, Eraser, Bot,
   Pencil, PanelLeftOpen, PanelLeftClose,
-  Paperclip, X, FileText, Image as ImgIcon, Loader2,
+  Paperclip, X, FileText, Image as ImgIcon, Loader2, Mic,
 } from 'lucide-react';
 import { useStore } from '../store';
 import {
   streamChat, formatModelName, formatModelSize,
-  uploadFile, ragIngest, ragRetrieve, ragGetFullDoc, selectFiles,
+  uploadFile, ragIngest, ragRetrieve, ragGetFullDoc, selectFiles, transcribeAudio,
 } from '../api/ollama';
 import type { Message, OllamaModel, PendingAttachment } from '../types';
 
@@ -239,6 +239,91 @@ const ACCEPTED = [
   'image/jpeg','image/png','image/gif','image/webp','image/bmp',
 ].join(',');
 
+type VoiceState = 'idle' | 'recording' | 'transcribing' | 'error';
+
+function MicButton({ isDark, disabled, onTranscript, onError }: {
+  isDark: boolean; disabled: boolean; onTranscript: (text: string) => void; onError?: (msg: string) => void;
+}) {
+  const [state, setState] = useState<VoiceState>('idle');
+  const [errMsg, setErrMsg] = useState('');
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef   = useRef<Blob[]>([]);
+  const streamRef   = useRef<MediaStream | null>(null);
+
+  const cleanup = () => {
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+    recorderRef.current = null;
+  };
+
+  const start = async () => {
+    setErrMsg('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus' : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm' : '';
+      const rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      chunksRef.current = [];
+      rec.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      rec.onstop = async () => {
+        cleanup();
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' });
+        if (blob.size < 500) { setState('idle'); return; } // essentially silent, skip round-trip
+        setState('transcribing');
+        try {
+          const text = await transcribeAudio(blob);
+          setState('idle');
+          if (text.trim()) onTranscript(text.trim());
+        } catch (err) {
+          setState('error');
+          const m = err instanceof Error ? err.message : String(err);
+          setErrMsg(m);
+          onError?.(m);
+          setTimeout(() => setState('idle'), 2500);
+        }
+      };
+      recorderRef.current = rec;
+      rec.start();
+      setState('recording');
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[LocalChat mic] getUserMedia failed:', err);
+      setState('error');
+      const name = err instanceof DOMException ? err.name : '';
+      const msg =
+        name === 'NotAllowedError' ? 'Mic permission denied — check the site permission (padlock icon) or chrome://settings/content/microphone'
+        : name === 'NotFoundError' ? 'No microphone found — check input device selection'
+        : name === 'NotReadableError' ? 'Mic is in use by another app or the OS blocked hardware access'
+        : name === 'SecurityError' ? 'Blocked: page must be served over 127.0.0.1 or https, not a LAN IP'
+        : `Mic error: ${err instanceof Error ? err.message : String(err)}`;
+      setErrMsg(msg);
+      onError?.(msg);
+      setTimeout(() => setState('idle'), 4000);
+    }
+  };
+
+  const stop = () => recorderRef.current?.stop();
+
+  const toggle = () => { if (state === 'idle') start(); else if (state === 'recording') stop(); };
+
+  const base = isDark ? 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5' : 'text-zinc-400 hover:text-zinc-700 hover:bg-black/5';
+  const icon = state === 'recording'
+    ? <Square size={13} className="text-red-500 animate-pulse" fill="currentColor"/>
+    : state === 'transcribing'
+    ? <Loader2 size={15} className="animate-spin text-violet-400"/>
+    : <Mic size={15}/>;
+
+  return (
+    <button onClick={toggle} disabled={disabled || state === 'transcribing'}
+      title={state === 'error' ? errMsg : state === 'recording' ? 'Stop recording' : 'Voice input'}
+      className={`shrink-0 self-end mb-2.5 p-1.5 rounded-lg transition-colors ${state === 'error' ? 'text-red-500' : base} ${disabled ? 'opacity-30 cursor-not-allowed' : ''}`}>
+      {icon}
+    </button>
+  );
+}
+
 function InputBox({ onSend, onStop, isStreaming, disabled, isDark, attachments, onAttach, onRemoveAttachment, onAddToKB }: {
   onSend: (t: string) => void; onStop: () => void;
   isStreaming: boolean; disabled: boolean; isDark: boolean;
@@ -248,6 +333,12 @@ function InputBox({ onSend, onStop, isStreaming, disabled, isDark, attachments, 
   onAddToKB: (att: PendingAttachment) => void;
 }) {
   const [value, setValue]     = useState('');
+  const [micError, setMicError] = useState('');
+  useEffect(() => {
+    if (!micError) return;
+    const t = setTimeout(() => setMicError(''), 6000);
+    return () => clearTimeout(t);
+  }, [micError]);
   const [uploading, setUpl]   = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
@@ -300,6 +391,17 @@ function InputBox({ onSend, onStop, isStreaming, disabled, isDark, attachments, 
           {uploading ? <Loader2 size={15} className="animate-spin"/> : <Paperclip size={15}/>}
         </button>
 
+        <MicButton isDark={isDark} disabled={isStreaming}
+          onTranscript={text => {
+            setMicError('');
+            setValue(prev => {
+              const next = prev.trim() ? `${prev.trim()} ${text}` : text;
+              return next;
+            });
+            setTimeout(resize, 0);
+          }}
+          onError={setMicError} />
+
         <textarea ref={textRef} rows={1} value={value}
           onChange={e => { setValue(e.target.value); resize(); }}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
@@ -313,6 +415,9 @@ function InputBox({ onSend, onStop, isStreaming, disabled, isDark, attachments, 
           }
         </div>
       </div>
+      {micError && (
+        <p className="px-3 pb-2 text-xs text-red-500">{micError}</p>
+      )}
     </div>
   );
 }

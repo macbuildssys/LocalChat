@@ -247,6 +247,7 @@ function KnowledgeBase({ isDark }: { isDark: boolean }) {
 function SettingsPanel({ isDark }: { isDark: boolean }) {
   const [open, setOpen]   = useState(false);
   const [host, setHost]   = useState('');
+  const [whisperModel, setWhisperModel] = useState('base');
   const [saved, setSaved] = useState(false);
   const [envLock, setEnvLock] = useState(false);
   const [pos, setPos] = useState<{ bottom: number; left: number } | null>(null);
@@ -269,7 +270,7 @@ function SettingsPanel({ isDark }: { isDark: boolean }) {
     if (rect) setPos({ bottom: window.innerHeight - rect.top + 8, left: rect.left });
     fetch('/api/config')
       .then(r => r.json())
-      .then(d => { setHost(d.ollama_host ?? ''); setEnvLock(d.env_override ?? false); })
+      .then(d => { setHost(d.ollama_host ?? ''); setEnvLock(d.env_override ?? false); setWhisperModel(d.whisper_model ?? 'base'); })
       .catch(() => {});
   }, [open]);
 
@@ -277,7 +278,7 @@ function SettingsPanel({ isDark }: { isDark: boolean }) {
     await fetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ollama_host: host }),
+      body: JSON.stringify({ ollama_host: host, whisper_model: whisperModel }),
     });
     setSaved(true);
     setTimeout(() => { setSaved(false); setOpen(false); }, 1200);
@@ -320,6 +321,20 @@ function SettingsPanel({ isDark }: { isDark: boolean }) {
           )}
           <p className={`text-[10px] mb-3 ${label}`}>
             IP or hostname only — no http:// prefix needed.
+          </p>
+
+          <label className={`block text-xs mb-1 ${label}`}>Voice Input Model</label>
+          <select
+            value={whisperModel}
+            onChange={e => setWhisperModel(e.target.value)}
+            className={`w-full text-xs px-3 py-2 rounded-lg border outline-none font-mono mb-1 ${inputBg}`}
+          >
+            <option value="tiny">tiny — fastest, least accurate</option>
+            <option value="base">base — recommended</option>
+            <option value="small">small — more accurate, slower</option>
+          </select>
+          <p className={`text-[10px] mb-3 ${label}`}>
+            Runs on CPU via faster-whisper — larger sizes need more RAM and time per transcript.
           </p>
 
           <button onClick={save} disabled={envLock || !host.trim()}

@@ -1,0 +1,9 @@
+#!/bin/bash
+# AppRun — entry point executed by the AppImage runtime.
+# $APPDIR is set automatically by the AppImage loader to the mount point
+# of the squashfs image (read-only), so we only ever read from here —
+# all writable data (config.json, chroma_db) goes through backend/paths.py
+# to $XDG_CONFIG_HOME / $XDG_DATA_HOME instead.
+HERE="$(dirname "$(readlink -f "${0}")")"
+export APPDIR="${APPDIR:-$HERE}"
+exec "$APPDIR/usr/bin/localchat/localchat" "$@"

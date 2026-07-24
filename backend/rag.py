@@ -8,12 +8,23 @@ import httpx
 import chromadb
 from chromadb.config import Settings
 
+from . import paths as paths_module
+
 log = logging.getLogger("localchat.rag")
 
-CHROMA_PATH  = Path(__file__).parent.parent / "chroma_db"
+CHROMA_PATH  = paths_module.data_dir() / "chroma_db"
 EMBED_MODEL  = "nomic-embed-text"
 CHUNK_WORDS  = 350
 CHUNK_OVERLAP = 50
+
+_legacy_chroma = Path(__file__).parent.parent / "chroma_db"
+if _legacy_chroma.exists() and not CHROMA_PATH.exists():
+    import shutil
+    try:
+        shutil.move(str(_legacy_chroma), str(CHROMA_PATH))
+        log.info("Migrated chroma_db from %s to %s", _legacy_chroma, CHROMA_PATH)
+    except Exception:
+        log.exception("Could not migrate legacy chroma_db; starting fresh at %s", CHROMA_PATH)
 
 # Module-level singleton — reused across all requests
 _collection = None
