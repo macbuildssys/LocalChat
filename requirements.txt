@@ -14,3 +14,6 @@ pillow>=10.0.0
 
 # RAG
 chromadb>=0.5.0
+
+# Voice input (offline STT)
+faster-whisper>=1.0.0

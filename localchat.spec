@@ -12,6 +12,26 @@ datas = [
     ("backend", "backend"),    # Python package
 ]
 
+# faster-whisper ships non-Python assets (notably the Silero VAD ONNX model
+# used by vad_filter=True) as package data. collect_all("faster_whisper")
+# below does NOT reliably pull these into the bundle when combined with the
+# rest of this spec's collect_all list — verified by direct inspection of
+# Analysis.datas, which came back empty for this package despite
+# PyInstaller.utils.hooks.collect_all() finding the file fine in isolation.
+# Rather than depend on that, add it explicitly so a silent regression here
+# fails loudly (missing import) instead of failing at runtime deep inside
+# an AppImage mount.
+try:
+    import faster_whisper
+    _fw_assets = Path(faster_whisper.__file__).parent / "assets"
+    if _fw_assets.is_dir():
+        datas.append((str(_fw_assets), "faster_whisper/assets"))
+except ImportError:
+    raise SystemExit(
+        "faster-whisper is not installed in this environment — "
+        "run `pip install -r requirements.txt` before building."
+    )
+
 # All hidden imports that PyInstaller misses due to dynamic loading
 hidden = [
     # uvicorn
@@ -80,6 +100,13 @@ hidden = [
     "backend.main",
     "backend.parsers",
     "backend.rag",
+    "backend.voice",
+    "backend.paths",
+    # faster-whisper / ctranslate2
+    "faster_whisper",
+    "ctranslate2",
+    "av",
+    "tokenizers",
 ]
 
 a = Analysis(
@@ -91,7 +118,14 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "PyQt5", "PyQt6", "PySide6", "wx"],
+    excludes=[
+        "tkinter", "PyQt5", "PyQt6", "PySide6", "wx",
+        # Pulled in transitively by chromadb's collect_all sweep but never
+        # actually used at runtime — cuts well over 100MB of dead weight.
+        "matplotlib", "pandas", "scipy", "sympy",
+        "IPython", "notebook", "jupyter", "jupyter_client", "jupyter_core",
+        "ipykernel", "sklearn", "seaborn",
+    ],
     cipher=block_cipher,
     noarchive=False,
     collect_all=[
@@ -100,6 +134,9 @@ a = Analysis(
         "fastapi",
         "starlette",
         "anyio",
+        "faster_whisper",
+        "ctranslate2",
+        "av",
     ],
 )
 

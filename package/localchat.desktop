@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=LocalChat
+GenericName=Offline AI Chat
+Comment=Privacy-first, fully offline chat interface for local LLMs via Ollama
+Exec=localchat
+Icon=localchat
+Terminal=false
+Categories=Utility;Chat;Development;
+StartupWMClass=LocalChat

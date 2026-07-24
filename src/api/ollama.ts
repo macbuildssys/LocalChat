@@ -72,6 +72,18 @@ export async function uploadFile(file: File): Promise<Omit<PendingAttachment, 'i
   });
 }
 
+export async function transcribeAudio(blob: Blob): Promise<string> {
+  const fd = new FormData();
+  fd.append('file', blob, `mic.${blob.type.includes('wav') ? 'wav' : 'webm'}`);
+  const res = await fetch(`${API}/transcribe`, { method: 'POST', body: fd });
+  if (!res.ok) {
+    const msg = await res.json().catch(() => ({}));
+    throw new Error(msg.detail ?? `Transcription failed (${res.status})`);
+  }
+  const data = await res.json();
+  return (data.text ?? '') as string;
+}
+
 // RAG API
 export interface KBDoc { doc_id: string; filename: string; chunks: number }
 export interface KBChunk { text: string; filename: string; doc_id: string; score: number }
