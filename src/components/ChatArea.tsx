@@ -47,12 +47,32 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
+/*
+`children` passed into CodeBlock isn't plain text — rehype-highlight wraps each
+syntax-highlighted token in its own <span> element for coloring, so children is
+really a mixed tree of strings and React elements. String(children) on that
+tree calls Array.prototype.toString(), which stringifies each React element
+(a plain object) as "[object Object]" and joins everything with commas —
+producing exactly that garbled "[object Object], term_1 = ,[object Object]"
+output instead of the real code. This walks the tree and concatenates only
+the actual text nodes, ignoring element wrappers entirely.
+*/
+function extractText(node: React.ReactNode): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join('');
+  if (typeof node === 'object' && 'props' in node) {
+    return extractText((node as { props: { children?: React.ReactNode } }).props.children);
+  }
+  return '';
+}
+
 function CodeBlock({ className, children }: { className?: string; children: React.ReactNode }) {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
   const lang = /language-(\w+)/.exec(className ?? '')?.[1] ?? '';
   const copy = async () => {
-    const ok = await copyToClipboard(String(children).replace(/\n$/, ''));
+    const ok = await copyToClipboard(extractText(children).replace(/\n$/, ''));
     if (ok) { setCopied(true); setFailed(false); setTimeout(() => setCopied(false), 2000); }
     else { setFailed(true); setTimeout(() => setFailed(false), 2000); }
   };
@@ -618,3 +638,4 @@ export default function ChatArea({ chatId, sidebarOpen, onToggleSidebar }: {
     </div>
   );
 }
+

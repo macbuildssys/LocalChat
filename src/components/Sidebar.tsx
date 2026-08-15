@@ -248,7 +248,11 @@ function SettingsPanel({ isDark }: { isDark: boolean }) {
   const [open, setOpen]   = useState(false);
   const [host, setHost]   = useState('');
   const [whisperModel, setWhisperModel] = useState('base');
+  const [forceGpu, setForceGpu] = useState(false);
+  const [gpuOffloadPercent, setGpuOffloadPercent] = useState(78);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const [reloadedCount, setReloadedCount] = useState(0);
   const [envLock, setEnvLock] = useState(false);
   const [pos, setPos] = useState<{ bottom: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -268,20 +272,40 @@ function SettingsPanel({ isDark }: { isDark: boolean }) {
     if (!open) return;
     const rect = btnRef.current?.getBoundingClientRect();
     if (rect) setPos({ bottom: window.innerHeight - rect.top + 8, left: rect.left });
-    fetch('/api/config')
+    fetch('/api/config', { cache: 'no-store' })
       .then(r => r.json())
-      .then(d => { setHost(d.ollama_host ?? ''); setEnvLock(d.env_override ?? false); setWhisperModel(d.whisper_model ?? 'base'); })
+      .then(d => {
+        setHost(d.ollama_host ?? '');
+        setEnvLock(d.env_override ?? false);
+        setWhisperModel(d.whisper_model ?? 'base');
+        setForceGpu(d.force_gpu ?? false);
+        setGpuOffloadPercent(d.gpu_offload_percent ?? 78);
+      })
       .catch(() => {});
   }, [open]);
 
   const save = async () => {
-    await fetch('/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ollama_host: host, whisper_model: whisperModel }),
-    });
-    setSaved(true);
-    setTimeout(() => { setSaved(false); setOpen(false); }, 1200);
+    setSaveError(false);
+    try {
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(host.trim() ? { ollama_host: host } : {}),
+          whisper_model: whisperModel,
+          force_gpu: forceGpu,
+          gpu_offload_percent: gpuOffloadPercent,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
+      const data = await res.json();
+      setReloadedCount(Array.isArray(data.reloaded_models) ? data.reloaded_models.length : 0);
+      setSaved(true);
+      setTimeout(() => { setSaved(false); setOpen(false); }, 1500);
+    } catch {
+      setSaveError(true);
+    }
   };
 
   const panelBg = isDark ? 'bg-zinc-900 border-zinc-700 shadow-2xl' : 'bg-white border-zinc-200 shadow-xl';
@@ -302,7 +326,7 @@ function SettingsPanel({ isDark }: { isDark: boolean }) {
           instead of being clipped by the sidebar's overflow-hidden collapse wrapper. */}
       {open && pos && createPortal(
         <div ref={panelRef} style={{ bottom: pos.bottom, left: pos.left }}
-          className={`fixed w-72 rounded-xl border p-4 z-[100] ${panelBg}`}>
+          className={`fixed w-72 max-h-[75vh] overflow-y-auto rounded-xl border p-4 z-[100] ${panelBg}`}>
           <p className={`text-xs font-semibold uppercase tracking-widest mb-3 ${label}`}>Settings</p>
 
           <label className={`block text-xs mb-1 ${label}`}>Ollama Host</label>
@@ -316,14 +340,14 @@ function SettingsPanel({ isDark }: { isDark: boolean }) {
           />
           {envLock && (
             <p className="text-[10px] text-amber-500 mb-2">
-              Locked — OLLAMA_HOST env var is set and takes priority.
+               The Ollama host environment variable is set and takes priority.
             </p>
           )}
           <p className={`text-[10px] mb-3 ${label}`}>
-            IP or hostname only — no http:// prefix needed.
+            IP or hostname only. No http:// prefix needed.
           </p>
 
-          <label className={`block text-xs mb-1 ${label}`}>Voice Input Model</label>
+          <label className={`block text-xs mb-1 ${label}`}>Voice input model</label>
           <select
             value={whisperModel}
             onChange={e => setWhisperModel(e.target.value)}
@@ -334,13 +358,55 @@ function SettingsPanel({ isDark }: { isDark: boolean }) {
             <option value="small">small — more accurate, slower</option>
           </select>
           <p className={`text-[10px] mb-3 ${label}`}>
-            Runs on CPU via faster-whisper — larger sizes need more RAM and time per transcript.
+            Faster-whisper runs on CPU. Larger sizes require more RAM and time per transcript.
           </p>
 
-          <button onClick={save} disabled={envLock || !host.trim()}
+          <div className="flex items-center justify-between mb-1">
+            <label className={`text-xs ${label}`}>GPU offload</label>
+            <button
+              type="button"
+              onClick={() => setForceGpu(v => !v)}
+              title={forceGpu ? 'Disable custom GPU offload' : 'Enable custom GPU offload'}
+              className={forceGpu ? 'text-violet-500' : label}
+            >
+              {forceGpu ? <ToggleRight size={22}/> : <ToggleLeft size={22}/>}
+            </button>
+          </div>
+          <p className={`text-[10px] ${forceGpu ? 'mb-2' : 'mb-3'} ${label}`}>
+            Overrides Ollama's often-conservative auto-estimate by targeting a fixed
+            share of each model's layers on GPU, leaving the rest on CPU on purpose.
+          </p>
+
+          {forceGpu && (
+            <>
+              <div className="flex items-center justify-between mb-1">
+                <label className={`text-xs ${label}`}>GPU offload target</label>
+                <span className={`text-xs font-mono ${label}`}>{gpuOffloadPercent}%</span>
+              </div>
+              <input
+                type="range"
+                min={25}
+                max={100}
+                step={1}
+                value={gpuOffloadPercent}
+                onChange={e => setGpuOffloadPercent(Number(e.target.value))}
+                className="w-full mb-1 accent-violet-500"
+              />
+              <p className={`text-[10px] mb-3 ${label}`}>
+                75–80% is a safe default, which is enough to beat Ollama's conservative auto-estimate
+                without risking a full-offload failure.
+              </p>
+            </>
+          )}
+
+          <button onClick={save}
             className="w-full py-1.5 rounded-lg text-xs font-medium bg-violet-600 hover:bg-violet-500
               text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-            {saved ? '✓ Saved — restart to apply' : 'Save'}
+            {saveError
+              ? '✕ Failed to save — try again'
+              : saved
+                ? (reloadedCount > 0 ? `✓ Saved — reloading ${reloadedCount} model${reloadedCount > 1 ? 's' : ''}` : '✓ Saved')
+                : 'Save'}
           </button>
         </div>,
         document.body
@@ -465,8 +531,7 @@ function ProjectsSection({ isDark }: { isDark: boolean }) {
 
 export default function Sidebar({ onNewChat }: SidebarProps) {
   const { chats, activeChatId, setActiveChat, deleteChat, renameChat, isDark, toggleTheme, projects, moveChatToProject } = useStore();
-  // Only chats with no project show up in the flat Today/Yesterday list —
-  // chats inside a project live under that project instead.
+  // Only chats with no project show up in the flat Today/Yesterday list; chats inside a project live under that project instead.
   const unfiledChats = chats.filter(c => !c.projectId);
   const groups    = groupChats([...unfiledChats].sort((a, b) => b.updatedAt - a.updatedAt));
   const sidebarBg = isDark ? 'bg-surface-900 border-white/5' : 'bg-surface-50 border-black/5';
