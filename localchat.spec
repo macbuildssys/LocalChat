@@ -93,6 +93,50 @@ hidden = [
     "chromadb.segment.impl.metadata.sqlite",
     "chromadb.types",
     "chromadb.utils",
+    # chromadb.telemetry — like faster_whisper's assets above, collect_all
+    # does NOT reliably pull this in despite being listed there too.
+    # Missing it causes a ModuleNotFoundError deep inside
+    # chromadb.config.Settings.instance() the first time any RAG endpoint
+    # runs, since chroma_product_telemetry_impl defaults to a dotted path
+    # under this package that gets imported dynamically via importlib.
+    # (anonymized_telemetry=False, already set in rag.py, only suppresses
+    # the actual telemetry *calls* — the class still needs to import
+    # successfully regardless, which is what fails here.)
+    "chromadb.telemetry",
+    "chromadb.telemetry.product",
+    "chromadb.telemetry.product.events",
+    "chromadb.telemetry.product.posthog",
+    # chromadb.api.rust — chromadb's default local API backend, selected
+    # dynamically via chroma_api_impl (same importlib-string pattern as
+    # the telemetry class above), so PyInstaller's static analysis never
+    # traces into rust.py and never discovers ITS import of
+    # chromadb_rust_bindings below. Both must be listed explicitly.
+    "chromadb.api.rust",
+    # chromadb_rust_bindings — a separate top-level package (not nested
+    # under chromadb, so collect_all=["chromadb"] never reaches it)
+    # containing a compiled Rust extension (.abi3.so). Listed here so
+    # PyInstaller traces the import; also added to collect_all below so
+    # the compiled binary itself gets copied into the bundle, not just
+    # discovered.
+    "chromadb_rust_bindings",
+    # The rest of chromadb's dynamically-loaded local-mode components —
+    # same importlib-string pattern as api.rust and telemetry above.
+    # (Distributed-mode-only ones like segment_directory/memberlist_provider
+    # are deliberately omitted — PersistentClient never touches those.)
+    "chromadb.db.impl",
+    "chromadb.db.impl.sqlite",
+    "chromadb.segment.impl.manager",
+    "chromadb.segment.impl.manager.local",
+    "chromadb.execution",
+    "chromadb.execution.executor",
+    "chromadb.execution.executor.local",
+    "chromadb.quota",
+    "chromadb.quota.simple_quota_enforcer",
+    "chromadb.rate_limit",
+    "chromadb.rate_limit.simple_rate_limit",
+    "chromadb.ingest",
+    "chromadb.ingest.impl",
+    "chromadb.ingest.impl.simple_policy",
     "hnswlib",
     "pysqlite3",
     # backend package
@@ -130,6 +174,7 @@ a = Analysis(
     noarchive=False,
     collect_all=[
         "chromadb",
+        "chromadb_rust_bindings",
         "uvicorn",
         "fastapi",
         "starlette",

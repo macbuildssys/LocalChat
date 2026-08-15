@@ -27,8 +27,8 @@ PORT = 8765
 """
 Open the browser at 127.0.0.1, NOT 0.0.0.0. Browsers only treat localhost as a "secure context", 
 which navigator.clipboard.writeText() requires. Loading the literal address 0.0.0.0 (or a LAN IP)
- disables the Clipboard API, which was the root cause of the Copy button silently failing 
- while still showing a "Copied" confirmation
+disables the Clipboard API, which was the root cause of the Copy button silently failing 
+while still showing a "Copied" confirmation
 """
 
 URL = f"http://127.0.0.1:{PORT}"
@@ -71,7 +71,9 @@ if __name__ == "__main__":
     if not _wait():
         print("Warning: server slow to start — opening browser anyway.")
 
-    webbrowser.open(URL)
+    # --no-browser: used by the build script's automated smoke test, so packaging a headless CI/VM run doesn't try to launch a real browser.
+    if "--no-browser" not in sys.argv:
+        webbrowser.open(URL)
     print("Press Ctrl+C to stop.")
 
     try:
@@ -79,3 +81,4 @@ if __name__ == "__main__":
             time.sleep(1)
     except KeyboardInterrupt:
         print("\nStopped.")
+        
