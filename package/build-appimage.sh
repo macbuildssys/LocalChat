@@ -63,13 +63,12 @@ echo "==> 5/5  Building AppImage"
 ARCH=x86_64 "$APPIMAGETOOL" "$APPDIR" "$ROOT/LocalChat-x86_64.AppImage"
 
 echo "==> 6/6  Smoke-testing the built AppImage"
-# Source-mode testing (`python3 run.py`) runs against the VM's real
-# site-packages and can't catch PyInstaller packaging gaps — a module can
-# exist on disk and still fail to get bundled into the frozen binary (this
-# is exactly how the chromadb.telemetry ModuleNotFoundError shipped
-# unnoticed). Launch the actual .AppImage headlessly and hit the endpoints
-# that exercise the trickiest bundled dependencies (chromadb/RAG, in
-# particular) before calling the build done.
+# Source-mode testing (`python3 run.py`) runs against the VM's real site-packages and can't catch
+# PyInstaller packaging gaps. A module can exist on disk and still fail to get bundled into the frozen
+# binary (this is exactly how the chromadb.telemetry ModuleNotFoundError shipped unnoticed). 
+# Launch the actual .AppImage headlessly and hit the endpoints that exercise the trickiest bundled dependencies
+# (chromadb/RAG, in particular) before calling the build done.
+
 SMOKE_PORT=8765
 export OLLAMA_HOST="127.0.0.1:11434"   # harmless if unreachable; endpoints below don't require a live model
 "$ROOT/LocalChat-x86_64.AppImage" --no-browser >"$BUILD_DIR/smoke-test.log" 2>&1 &
@@ -88,7 +87,7 @@ for i in $(seq 1 30); do
 done
 
 if [ "$READY" -ne 1 ]; then
-  echo "FAILED: server never came up — see $BUILD_DIR/smoke-test.log"
+  echo "FAILED: server never came up. See $BUILD_DIR/smoke-test.log"
   cat "$BUILD_DIR/smoke-test.log"
   exit 1
 fi
@@ -103,7 +102,7 @@ for endpoint in "/api/config" "/api/rag/documents"; do
 done
 
 if grep -qi "Traceback (most recent call last)" "$BUILD_DIR/smoke-test.log"; then
-  echo "FAILED: backend logged a traceback during smoke test — full log below"
+  echo "FAILED: backend logged a traceback during smoke test. Full log available"
   echo "(also saved at $BUILD_DIR/smoke-test.log)"
   echo "----"
   cat "$BUILD_DIR/smoke-test.log"
@@ -116,11 +115,11 @@ trap - EXIT
 
 if [ "$SMOKE_FAILED" -ne 0 ]; then
   echo
-  echo "Smoke test FAILED — not shipping this build. Fix the above and rerun."
+  echo "Smoke test FAILED. This build will not be shipped. Fix the issue(s) and rerun."
   exit 1
 fi
 
-echo "Smoke test passed — /api/config and /api/rag/documents both responded cleanly."
+echo "Smoke test passed /api/config and /api/rag/documents both responded cleanly."
 echo
 echo "Done: $ROOT/LocalChat-x86_64.AppImage"
 echo "Run it directly (chmod +x already applied by appimagetool):"

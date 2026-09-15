@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { generateUUID } from "../utils/uuid";
 import {
-  Send, Square, Copy, Check, ChevronDown, Eraser, Bot,
+  Send, Square, Copy, Check, ChevronDown, Eraser,
   Pencil, PanelLeftOpen, PanelLeftClose,
   Paperclip, X, FileText, Image as ImgIcon, Loader2, Mic,
 } from 'lucide-react';
@@ -52,7 +52,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
 syntax-highlighted token in its own <span> element for coloring, so children is
 really a mixed tree of strings and React elements. String(children) on that
 tree calls Array.prototype.toString(), which stringifies each React element
-(a plain object) as "[object Object]" and joins everything with commas —
+(a plain object) as "[object Object]" and joins everything with commas;
 producing exactly that garbled "[object Object], term_1 = ,[object Object]"
 output instead of the real code. This walks the tree and concatenates only
 the actual text nodes, ignoring element wrappers entirely.
@@ -150,7 +150,7 @@ function AssistantMessage({ msg, isDark }: { msg: Message; isDark: boolean }) {
   };
   return (
     <div className={`group flex gap-3 mb-6 msg-animate ${isDark ? '' : 'light-prose'}`}>
-      <div className="shrink-0 w-7 h-7 rounded-full bg-violet-600 flex items-center justify-center mt-0.5"><Bot size={14} className="text-white"/></div>
+      <img src="/logo.png" alt="" className="shrink-0 w-7 h-7 mt-0.5 object-contain" />
       <div className="flex-1 min-w-0">
         <div className={`text-xs font-medium mb-1.5 flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
           <span>{formatModelName(msg.model)}</span>
@@ -269,22 +269,65 @@ function MicButton({ isDark, disabled, onTranscript, onError }: {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef   = useRef<Blob[]>([]);
   const streamRef   = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
   const cleanup = () => {
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
+    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
     recorderRef.current = null;
   };
 
   const start = async () => {
     setErrMsg('');
+
+    // navigator.mediaDevices is only defined in a secure context: HTTPS, or an address that is exactly
+    // localhost/127.0.0.1. Loading LocalChat over a plain http:// LAN address (e.g. the host browser pointed at
+    // the VM's IP) makes this whole object undefined, so calling .getUserMedia on it throws a generic TypeError 
+    // before any DOMException/SecurityError path below is ever reached. Checking for it explicitly gives the real
+    // reason instead of a confusing "Cannot read properties of undefined".
+    if (!navigator.mediaDevices?.getUserMedia) {
+      const msg = window.isSecureContext === false
+        ? "Microphone needs a secure connection — you're loading LocalChat over plain http:// on a non-localhost address. This applies in every browser, not just this one. The reliable fix is an SSH tunnel to localhost. Chrome also has chrome://flags/#unsafely-treat-insecure-origin-as-secure (add this exact URL); Firefox has media.devices.insecure.enabled in about:config, though that one is less consistently documented."
+        : 'Microphone API unavailable in this browser.';
+      setState('error');
+      setErrMsg(msg);
+      onError?.(msg);
+      setTimeout(() => setState('idle'), 4000);
+      return;
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Default constraints turn on echo cancellation, noise suppression and automatic gain control. These are
+      // tuned for real hardware mics and can misfire badly on virtual or passthrough audio devices (common in VMs),
+      // sometimes gating out real speech as "noise" entirely rather than just cleaning it up. Disabling them trades
+      // a little background hiss for actually capturing the voice at all.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
       streamRef.current = stream;
+
+      // Some environments (virtual or passthrough audio devices, common in VMs) hand the browser
+      // a genuine but very quiet signal; real speech, just a fraction of typical microphone loudness. That's
+      // quiet enough to fool the backend's voice-activity detector into treating it as silence even though the
+      // words are actually there. Boosting the level here, before it's ever encoded, gives both VAD and the
+      // transcription model a healthier signal to work with, rather than only reacting to the problem after the fact on the backend.
+      const AudioCtxCtor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const audioCtx = new AudioCtxCtor();
+      audioCtxRef.current = audioCtx;
+      const source = audioCtx.createMediaStreamSource(stream);
+      const gain = audioCtx.createGain();
+      gain.gain.value = 3;
+      const destination = audioCtx.createMediaStreamDestination();
+      source.connect(gain);
+      gain.connect(destination);
+      const boostedStream = destination.stream;
+
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus' : MediaRecorder.isTypeSupported('audio/webm')
         ? 'audio/webm' : '';
-      const rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const rec = mimeType ? new MediaRecorder(boostedStream, { mimeType }) : new MediaRecorder(boostedStream);
       chunksRef.current = [];
       rec.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       rec.onstop = async () => {
@@ -446,8 +489,10 @@ function WelcomeScreen({ isDark, models }: { isDark: boolean; models: OllamaMode
   return (
     <div className={`flex flex-col items-center justify-center h-full gap-6 px-8 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
       <div className="text-center">
-        <div className="w-14 h-14 rounded-2xl bg-violet-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-violet-900/30"><Bot size={28} className="text-white"/></div>
-        <h1 className={`text-2xl font-semibold mb-1 ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>LocalChat</h1>
+        <img src="/logo.png" alt="LocalChat" className="w-16 h-16 mx-auto mb-3 object-contain" />
+        <h1 className="text-3xl font-bold tracking-tight mb-1 bg-gradient-to-r from-sky-400 via-blue-500 to-violet-500 bg-clip-text text-transparent">
+          LocalChat
+        </h1>
         <p className="text-sm">{models.length > 0 ? `${models.length} model${models.length !== 1 ? 's' : ''} ready · fully offline` : 'Connecting…'}</p>
       </div>
       <p className={`text-sm ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>Send a message or attach a file to get started.</p>
@@ -551,7 +596,7 @@ export default function ChatArea({ chatId, sidebarOpen, onToggleSidebar }: {
 
   const handleStop = useCallback(() => { abortRef.current?.abort(); }, []);
 
-  // Model switch: update in place — no duplicate chat
+  // Model switch: update in place, no duplicate chat
   const handleModelChange = useCallback((newModel: string) => {
     updateChatModel(chatId, newModel);
   }, [chatId, updateChatModel]);
@@ -638,4 +683,3 @@ export default function ChatArea({ chatId, sidebarOpen, onToggleSidebar }: {
     </div>
   );
 }
-

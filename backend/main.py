@@ -56,6 +56,15 @@ def get_ollama_host() -> str:
 app = FastAPI(title="LocalChat")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+"""
+Ollama's own server side defaults are num_ctx=2048 and a very low num_predict.
+Left unset, a long conversation or a detailed technical answer will silently hit that ceiling
+and the stream ends mid sentence, with no error surfaced anywhere. LocalChat applies its own, larger
+default unless the caller has explicitly overridden it.
+"""
+
+DEFAULT_NUM_CTX = 8192
+
 @app.get("/api/config")
 def api_get_config():
     cfg = load_config()
@@ -63,6 +72,7 @@ def api_get_config():
     return {
         "ollama_host": host,
         "env_override": "OLLAMA_HOST" in os.environ,
+        "num_ctx": cfg.get("num_ctx", DEFAULT_NUM_CTX),
         "whisper_model": cfg.get("whisper_model", "base"),
         "force_gpu": cfg.get("force_gpu", False),
         "gpu_offload_percent": cfg.get("gpu_offload_percent", DEFAULT_GPU_OFFLOAD_PERCENT),
@@ -136,8 +146,7 @@ async def unload_loaded_models(ollama: str) -> list[str]:
             if not name:
                 continue
             try:
-                # keep_alive=0 tells Ollama to evict the model immediately
-                # after this (empty, prompt-less) request completes.
+                # keep_alive=0 tells Ollama to evict the model immediately after this (empty, prompt-less) request completes.
                 await client.post(f"{ollama}/api/generate", json={"model": name, "keep_alive": 0})
                 unloaded.append(name)
             except Exception as exc:
@@ -154,6 +163,11 @@ async def api_save_config(body: dict):
 
     if "ollama_host" in body:
         cfg["ollama_host"] = body["ollama_host"].strip()
+    if "num_ctx" in body:
+        try:
+            cfg["num_ctx"] = int(body["num_ctx"])
+        except (TypeError, ValueError):
+            raise HTTPException(400, "num_ctx must be an integer")
     if "whisper_model" in body:
         cfg["whisper_model"] = body["whisper_model"].strip()
     if "force_gpu" in body:
@@ -231,20 +245,23 @@ async def chat(request: Request):
     ollama = get_ollama_host()
     cfg    = load_config()
 
+    # Apply LocalChat's context length defaults, but let anything the client already set explicitly win.
+    options = {"num_ctx": cfg.get("num_ctx", DEFAULT_NUM_CTX), "num_predict": -1}
+    options.update(body.get("options") or {})
+
     if cfg.get("force_gpu", False):
         model = body.get("model", "")
         total_layers = await get_model_layer_count(model, ollama) if model else None
         if total_layers:
             pct = cfg.get("gpu_offload_percent", DEFAULT_GPU_OFFLOAD_PERCENT) / 100
             target_layers = max(1, round(total_layers * pct))
-            # Don't stomp on options the frontend/caller already set explicitly.
-            options = body.get("options") or {}
             options.setdefault("num_gpu", target_layers)
-            body["options"] = options
             log.info("force_gpu: %s -> %d/%d layers on GPU (%.0f%%)",
                       model, target_layers, total_layers, pct * 100)
         # If we couldn't determine the layer count, we deliberately leave `options` untouched and fall back
         # to Ollama's own estimate rather than guessing a raw layer number that might overshoot VRAM.
+
+    body["options"] = options
 
     async def _stream():
         async with httpx.AsyncClient(timeout=None) as client:
@@ -253,7 +270,6 @@ async def chat(request: Request):
                     yield chunk
 
     return StreamingResponse(_stream(), media_type="application/x-ndjson")
-
 
 ACCEPTED = (
     ".pdf .docx .doc .epub .odt .ods .odp "
@@ -335,4 +351,3 @@ def rag_full_document(doc_id: str):
 _dist = Path(__file__).parent.parent / "dist"
 if _dist.exists():
     app.mount("/", StaticFiles(directory=str(_dist), html=True), name="static")
-
