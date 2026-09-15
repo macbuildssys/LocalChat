@@ -15,7 +15,7 @@ function ErrorBanner({ message, isDark }: { message: string; isDark: boolean }) 
 }
 
 export default function App() {
-  const { isDark, models, setModels, chats, activeChatId, setActiveChat, createChat, ollamaError, setOllamaError, lastUsedModel } = useStore();
+  const { isDark, models, setModels, chats, activeChatId, setActiveChat, createChat, ollamaError, setOllamaError } = useStore();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => { document.documentElement.classList.toggle('dark', isDark); }, [isDark]);
@@ -30,10 +30,7 @@ export default function App() {
     if (!activeChatId && chats.length > 0) setActiveChat(chats[0].id);
   }, [activeChatId, chats, setActiveChat]);
 
-  // Keep using whichever model the user last picked, even for brand-new chats,
-  // instead of silently resetting to the first model Ollama happens to list.
-  const modelStillExists = lastUsedModel && models.some(m => m.name === lastUsedModel);
-  const defaultModel = (modelStillExists ? lastUsedModel : models[0]?.name) ?? '';
+  const defaultModel  = models[0]?.name ?? '';
   const handleNewChat = () => createChat(defaultModel);
   const toggle        = () => setSidebarOpen(v => !v);
 
@@ -43,8 +40,8 @@ export default function App() {
   return (
     <div className={`flex h-screen overflow-hidden ${bg} ${text}`}>
 
-      {/* Sidebar — overflow-hidden clips content when width → 0 */}
-      <div className={`flex-shrink-0 overflow-hidden transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-0'}`}>
+      {/* overflow-hidden only while collapsed — lets popovers (e.g. Settings) overflow past the sidebar edge when open */}
+      <div className={`flex-shrink-0 transition-all duration-300 ${sidebarOpen ? 'w-64 overflow-visible' : 'w-0 overflow-hidden'}`}>
         <Sidebar onNewChat={handleNewChat} />
       </div>
 

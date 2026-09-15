@@ -250,6 +250,7 @@ function SettingsPanel({ isDark }: { isDark: boolean }) {
   const [whisperModel, setWhisperModel] = useState('base');
   const [forceGpu, setForceGpu] = useState(false);
   const [gpuOffloadPercent, setGpuOffloadPercent] = useState(78);
+  const [numCtx, setNumCtx] = useState(8192);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [reloadedCount, setReloadedCount] = useState(0);
@@ -280,6 +281,7 @@ function SettingsPanel({ isDark }: { isDark: boolean }) {
         setWhisperModel(d.whisper_model ?? 'base');
         setForceGpu(d.force_gpu ?? false);
         setGpuOffloadPercent(d.gpu_offload_percent ?? 78);
+        setNumCtx(d.num_ctx ?? 8192);
       })
       .catch(() => {});
   }, [open]);
@@ -296,6 +298,7 @@ function SettingsPanel({ isDark }: { isDark: boolean }) {
           whisper_model: whisperModel,
           force_gpu: forceGpu,
           gpu_offload_percent: gpuOffloadPercent,
+          num_ctx: numCtx,
         }),
       });
       if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
@@ -347,6 +350,22 @@ function SettingsPanel({ isDark }: { isDark: boolean }) {
             IP or hostname only. No http:// prefix needed.
           </p>
 
+          <label className={`block text-xs mb-1 ${label}`}>Context length</label>
+          <select
+            value={numCtx}
+            onChange={e => setNumCtx(Number(e.target.value))}
+            className={`w-full text-xs px-3 py-2 rounded-lg border outline-none mb-1 ${inputBg}`}>
+            <option value={2048}>2048 — fastest, shortest memory</option>
+            <option value={4096}>4096</option>
+            <option value={8192}>8192 — default</option>
+            <option value={16384}>16384</option>
+            <option value={32768}>32768 — most VRAM</option>
+          </select>
+          <p className={`text-[10px] mb-3 ${label}`}>
+            Raises Ollama's default 2048-token limit, which otherwise cuts long
+            replies off mid-sentence. Higher uses more VRAM per model.
+          </p>
+
           <label className={`block text-xs mb-1 ${label}`}>Voice input model</label>
           <select
             value={whisperModel}
@@ -356,6 +375,8 @@ function SettingsPanel({ isDark }: { isDark: boolean }) {
             <option value="tiny">tiny — fastest, least accurate</option>
             <option value="base">base — recommended</option>
             <option value="small">small — more accurate, slower</option>
+            <option value="medium">medium — noticeably more accurate, slow on CPU</option>
+            <option value="large-v3-turbo">large-v3-turbo — most accurate, best speed/accuracy trade-off above small</option>
           </select>
           <p className={`text-[10px] mb-3 ${label}`}>
             Faster-whisper runs on CPU. Larger sizes require more RAM and time per transcript.
@@ -418,7 +439,7 @@ function SettingsPanel({ isDark }: { isDark: boolean }) {
 function ProjectRow({ project, isDark }: { project: { id: string; name: string }; isDark: boolean }) {
   const { chats, activeChatId, setActiveChat, deleteChat, renameChat, createChat, models, lastUsedModel,
           projects, moveChatToProject, deleteProject, renameProject } = useStore();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(project.name);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -540,10 +561,10 @@ export default function Sidebar({ onNewChat }: SidebarProps) {
   return (
     <div className={`flex flex-col h-full w-64 border-r ${sidebarBg}`}>
       <div className="flex items-center gap-2 px-3 pt-4 pb-3">
-        <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center shrink-0">
-          <span className="text-white text-xs font-bold">L</span>
-        </div>
-        <span className={`text-sm font-semibold tracking-tight ${isDark ? 'text-white' : 'text-zinc-900'}`}>LocalChat</span>
+        <img src="/logo.png" alt="LocalChat" className="w-8 h-8 shrink-0 object-contain" />
+        <span className="text-[15px] font-bold tracking-tight bg-gradient-to-r from-sky-400 via-blue-500 to-violet-500 bg-clip-text text-transparent">
+          LocalChat
+        </span>
       </div>
 
       <div className="px-3 pb-2">
