@@ -140,7 +140,7 @@ export async function selectFiles(multiple = true): Promise<File[]> {
   const electronAPI = (window as Window & { electronAPI?: { isElectron: boolean; selectFiles: (o: { multiple: boolean }) => Promise<{ name: string; buffer: string }[]> } }).electronAPI;
 
   if (electronAPI?.isElectron) {
-    // Use native OS dialog — avoids Electron renderer sandbox restrictions
+    // Use native OS dialog, avoids Electron renderer sandbox restrictions
     const results = await electronAPI.selectFiles({ multiple });
     return results.map(r => {
       const bytes = atob(r.buffer);
@@ -150,7 +150,7 @@ export async function selectFiles(multiple = true): Promise<File[]> {
     });
   }
 
-  // Browser fallback — programmatic input click
+  // Browser fallback, programmatic input click
   return new Promise(resolve => {
     const input    = document.createElement('input');
     input.type     = 'file';

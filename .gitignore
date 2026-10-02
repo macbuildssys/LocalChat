@@ -39,3 +39,7 @@ Thumbs.db
 
 # PyInstaller
 *.spec.bak
+.venv-build/
+build-old-24/
+build-pyi/
+dist-pyi/

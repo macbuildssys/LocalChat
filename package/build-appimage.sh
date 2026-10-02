@@ -21,11 +21,13 @@ PYI_WORK="$BUILD_DIR/pyinstaller-work"
 APPIMAGETOOL="$BUILD_DIR/appimagetool-x86_64.AppImage"
 
 echo "==> 1/5  Building frontend (npm run build)"
-if [ ! -d "$ROOT/node_modules" ]; then
-  npm install --legacy-peer-deps
+if [ "${SKIP_FRONTEND:-0}" != "1" ]; then
+  if [ ! -d "$ROOT/node_modules" ]; then
+    npm install --legacy-peer-deps
+  fi
+  rm -rf "$ROOT/dist"
+  npm run build
 fi
-rm -rf "$ROOT/dist"
-npm run build
 
 echo "==> 2/5  Building backend with PyInstaller"
 if ! command -v pyinstaller >/dev/null 2>&1; then
@@ -55,12 +57,18 @@ done
 echo "==> 4/5  Fetching appimagetool (cached in build/ after first run)"
 if [ ! -x "$APPIMAGETOOL" ]; then
   curl -L -o "$APPIMAGETOOL" \
-    "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+    "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
   chmod +x "$APPIMAGETOOL"
 fi
 
 echo "==> 5/5  Building AppImage"
 ARCH=x86_64 "$APPIMAGETOOL" "$APPDIR" "$ROOT/LocalChat-x86_64.AppImage"
+
+if [ "${SKIP_SMOKE:-0}" = "1" ]; then
+  echo "Skipping smoke test (run it on the host)"
+  echo "Done: $ROOT/LocalChat-x86_64.AppImage"
+  exit 0
+fi
 
 echo "==> 6/6  Smoke-testing the built AppImage"
 # Source-mode testing (`python3 run.py`) runs against the VM's real site-packages and can't catch
